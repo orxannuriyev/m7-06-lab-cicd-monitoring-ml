@@ -1,0 +1,139 @@
+groups:
+  - name: vision-moderation-alerts
+    rules:
+
+      # ====================================================
+      # Availability Burn Rate (Fast)
+      # 2% monthly error budget consumed in 1 hour
+      # Action: Page on-call engineer
+      # ====================================================
+      - alert: AvailabilityBurnFast
+        expr: |
+          (
+            (
+              sum(rate(http_requests_total{job="vision-moderation",code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="vision-moderation"}[5m]))
+            ) > (14.4 * (1 - 0.995))
+          )
+          and
+          (
+            (
+              sum(rate(http_requests_total{job="vision-moderation",code=~"5.."}[1h]))
+              /
+              sum(rate(http_requests_total{job="vision-moderation"}[1h]))
+            ) > (14.4 * (1 - 0.995))
+          )
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Availability burn rate is consuming error budget too quickly"
+          sli: "Availability (successful requests / total requests)"
+          threshold: "14.4x burn rate"
+          window: "5m and 1h"
+          runbook: "https://runbooks.example.com/vision-moderation/availability-burn-fast"
+
+      # ====================================================
+      # Availability Burn Rate (Slow)
+      # 10% monthly error budget consumed in 24 hours
+      # Action: Create ticket
+      # ====================================================
+      - alert: AvailabilityBurnSlow
+        expr: |
+          (
+            (
+              sum(rate(http_requests_total{job="vision-moderation",code=~"5.."}[2h]))
+              /
+              sum(rate(http_requests_total{job="vision-moderation"}[2h]))
+            ) > (1.0 * (1 - 0.995))
+          )
+          and
+          (
+            (
+              sum(rate(http_requests_total{job="vision-moderation",code=~"5.."}[24h]))
+              /
+              sum(rate(http_requests_total{job="vision-moderation"}[24h]))
+            ) > (1.0 * (1 - 0.995))
+          )
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Availability burn rate is elevated over a longer period"
+          sli: "Availability (successful requests / total requests)"
+          threshold: "1x burn rate"
+          window: "2h and 24h"
+          runbook: "https://runbooks.example.com/vision-moderation/availability-burn-slow"
+
+      # ====================================================
+      # P99 Latency
+      # p99 > 1 second for 5 minutes
+      # Action: Page on-call engineer
+      # ====================================================
+      - alert: LatencyP99High
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              rate(
+                http_request_duration_seconds_bucket{
+                  job="vision-moderation"
+                }[5m]
+              )
+            )
+          ) > 1
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "P99 latency exceeds 1 second"
+          sli: "P99 request latency"
+          threshold: "> 1 second"
+          window: "5 minutes"
+          runbook: "https://runbooks.example.com/vision-moderation/latency"
+
+      # ====================================================
+      # Feature Drift Detection
+      # PSI > 0.2 for any major feature for 1 hour
+      # Action: Create ticket
+      # ====================================================
+      - alert: DriftDetected
+        expr: |
+          max by (feature) (
+            feature_psi_score{
+              job="vision-moderation",
+              feature=~".+"
+            }
+          ) > 0.2
+        for: 1h
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Input feature drift detected"
+          sli: "Population Stability Index (PSI)"
+          threshold: "> 0.2"
+          window: "1 hour"
+          runbook: "https://runbooks.example.com/vision-moderation/drift"
+
+      # ====================================================
+      # Model Version Consistency
+      # Registry version != serving version
+      # Action: Page on-call engineer
+      # ====================================================
+      - alert: ModelVersionMismatch
+        expr: |
+          count(
+            model_version_mismatch{
+              job="vision-moderation"
+            } == 1
+          ) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "One or more replicas are serving an unexpected model version"
+          sli: "Model version consistency"
+          threshold: "At least one mismatched replica"
+          window: "5 minutes"
+          runbook: "https://runbooks.example.com/vision-moderation/model-version"s
